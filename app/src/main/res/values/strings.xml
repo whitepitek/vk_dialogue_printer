@@ -1,0 +1,83 @@
+<resources>
+    <string name="app_name">DialogPrinter</string>
+    <string name="title_activity_main">MainActivity</string>
+    <integer name="com_vk_sdk_AppId">5747814</integer>
+    <string name="com_vk_sdk_ApiVersion">"5.69"</string>
+    <integer name="auth_button_id">0</integer>
+    <string name="title_activity_choose">ChooseActivity</string>
+    <string name="head_template" formatted="false"><![CDATA[
+<!DOCTYPE html><html>
+<head>
+    <meta charset="utf-8">
+    <title>История</title>
+<style>
+.wrapper {
+    width: 600pt;
+    word-wrap: break-word;
+}
+.vertical_holder {
+    height: 10pt;
+}
+.msg_top {
+    display: flex;
+}
+.msg_bottom {
+    height: 10pt;
+}
+.msg_left {
+    width: 130pt;
+}
+.msg_right {
+    width: 80%
+}
+.message {
+    display: flex;
+    flex-direction: column;
+}
+.date {
+    font-size: 80%;
+    font-style: italic;
+    font-weight: lighter;
+}
+.name {
+    font-weight: bold;
+    color: #230E36;
+}
+.message_body {
+}
+.attach_desc {
+    font-size: 90%;
+}
+.attach_photos {
+}
+.attach_photo {
+    max-width: 47%;
+    vertical-align: top;
+}
+.attach_link {
+}
+.attach_video {
+}
+.attach_post {
+    margin-left: 10%;
+}
+.attach_audio {
+}
+.attach_sticker {
+}
+.attach_doc {
+}
+.forwarded_messages {
+    margin-left: 10%;
+}
+</style>
+    </head>
+    <body>
+        <div class="wrapper">
+        ]]></string>
+    <string name="trail_template" formatted="false"><![CDATA[
+            </div>
+    </body>
+</html>
+    ]]></string>
+</resources>
