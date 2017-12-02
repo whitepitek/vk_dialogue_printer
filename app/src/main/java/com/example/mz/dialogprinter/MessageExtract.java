@@ -1,8 +1,16 @@
 package com.example.mz.dialogprinter;
 
+import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.AsyncTask;
+import android.os.Environment;
 import android.util.Log;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.vk.sdk.VKAccessToken;
 import com.vk.sdk.api.VKApi;
 import com.vk.sdk.api.VKApiConst;
 import com.vk.sdk.api.VKError;
@@ -15,6 +23,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.Console;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -28,6 +40,8 @@ import java.util.concurrent.Callable;
 
 import retrofit2.http.POST;
 
+import static android.support.v4.app.ActivityCompat.startActivity;
+import static com.example.mz.dialogprinter.MainApp.getApp;
 import static com.example.mz.dialogprinter.MainApp.getVkQueue;
 import static com.vk.sdk.VKUIHelper.getApplicationContext;
 
@@ -36,7 +50,7 @@ import static com.vk.sdk.VKUIHelper.getApplicationContext;
  */
 
 public class MessageExtract {
-    public static Map<Integer, String> getNames() {
+    static Map<Integer, String> getNames() {
         return names;
     }
 
@@ -48,7 +62,7 @@ public class MessageExtract {
         void finished();
     }
 
-    public static void requestNames(Set<Integer> newUnknownIds, final OnFinishedCallback onFinished) {
+    static void requestNames(Set<Integer> newUnknownIds, final OnFinishedCallback onFinished) {
         for(int id: newUnknownIds) {
             if(!names.containsKey(id)) {
                 if(id >= 0)
@@ -216,7 +230,7 @@ public class MessageExtract {
         ArrayList<String> forwarded_messages = new ArrayList<>();
     }
 
-    public static String getMessageString(JSONObject jsonMessage, boolean is_fwd, boolean is_post) {
+    static String getMessageString(JSONObject jsonMessage, boolean is_fwd, boolean is_post) {
         Message message = new Message();
         try {
             if (is_post) {
@@ -393,5 +407,241 @@ public class MessageExtract {
         html +=  "</div>";
         html += "</div>";
         return html;
+    }
+}
+
+class DialogPusherParams {
+    TextView statusView;
+    long peerId;
+    String chosenName;
+    Activity callingActivity;
+    ProgressBar progressBar;
+}
+
+class DialogPusher extends AsyncTask<DialogPusherParams, Integer, Boolean> {
+    private TextView statusView = null;
+    private String userId = null;
+    private FileOutputStream outputStream = null;
+    private OutputStreamWriter writer = null;
+    private String chosenName = null;
+    private long peerId;
+    private Activity callingActivity;
+    private ProgressBar progressBar;
+
+    private String getDialogueFileName() {
+        return chosenName + "_" + userId + "_" + Long.toString(peerId) + ".html";
+    }
+    private Uri getDialogueUri() {
+        File directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        File file = new File(directory, getDialogueFileName());
+        return Uri.fromFile(file);
+    }
+
+    private boolean openFile() {
+        Boolean ok = Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED);
+        if(ok) {
+            File directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            File dialogueFile = new File(directory, getDialogueFileName());
+            try {
+                outputStream = new FileOutputStream(dialogueFile);
+                writer = new OutputStreamWriter(outputStream);
+            } catch (Exception e) {
+                ok = false;
+            }
+            if(ok) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private boolean writeHeader() {
+        if(outputStream != null) {
+            try {
+                outputStream.close();
+            } catch (IOException e) {}
+            outputStream = null;
+        }
+
+        if(!openFile())
+            return false;
+        return pushData(getApplicationContext().getResources().getString(R.string.head_template));
+    }
+
+    private boolean writeTrail() {
+        boolean ok = pushData(getApplicationContext().getResources().getString(R.string.trail_template));
+        try {
+            writer.close();
+            outputStream.close();
+        } catch (IOException e) {
+            ok = false;
+        } finally {
+            outputStream = null;
+        }
+        return ok;
+    }
+
+    private boolean pushData(String data) {
+        if(writer == null)
+            return false;
+        try {
+            outputStream.write(data.getBytes());
+        } catch (IOException e) {
+            return false;
+        }
+        return true;
+    }
+
+    private long offset = 0;
+    private long totalCount = -1;
+    private String lastError = "";
+
+    private class GetDialoguesRequestListener extends VKRequest.VKRequestListener {
+        private final Object lock = new Object();
+        boolean finished = false;
+
+        JSONObject answer = null;
+
+        void waitFinished() {
+            synchronized (lock) {
+                while(!finished) {
+                    try {
+                        lock.wait();
+                    } catch (InterruptedException e) {
+                        finished = true;
+                    }
+                }
+            }
+        }
+        private void notifyFinished() {
+            synchronized (lock) {
+                finished = true;
+                lock.notifyAll();
+            }
+        }
+
+        @Override
+        public void onComplete(VKResponse response) {
+            super.onComplete(response);
+            try {
+                answer = response.json.getJSONObject("response");
+            } catch (JSONException e) {
+                lastError = e.getMessage();
+            } finally {
+                notifyFinished();
+            }
+        }
+
+        @Override
+        public void onError(VKError error) {
+            lastError = "onerror " + error.apiError.toString() + " " + error.errorCode + ";";
+            notifyFinished();
+        }
+
+        @Override
+        public void attemptFailed(VKRequest request, int attemptNumber, int totalAttempts) {
+            if(attemptNumber >= totalAttempts) {
+                lastError = "attempt failed";
+                notifyFinished();
+            }
+        }
+    }
+
+    private String getDialogues() {
+
+        VKRequest request = new VKRequest("messages.getHistory",
+                VKParameters.from(
+                        VKApiConst.OFFSET, offset,
+                        VKApiConst.COUNT, 200,
+                        VKApiConst.USER_ID, userId,
+                        "peer_id", peerId,
+                        "rev", 1
+                ));
+
+        GetDialoguesRequestListener listener = new GetDialoguesRequestListener();
+        getVkQueue().addRequest(request, listener);
+        listener.waitFinished();
+        JSONObject jsonResponse = listener.answer;
+        String answer = null;
+        if(jsonResponse != null) {
+            try {
+                totalCount = jsonResponse.getLong("count");
+                JSONArray jsonItems = jsonResponse.getJSONArray("items");
+                int itemsCnt = jsonItems.length();
+                offset += itemsCnt;
+                for (int i = 0; i < itemsCnt; ++i) {
+                    JSONObject item = jsonItems.getJSONObject(i);
+                    if(answer == null)
+                        answer = "";
+                    answer += MessageExtract.getMessageString(item, false, false);
+                }
+            } catch (JSONException e) {
+                lastError = e.getMessage();
+                answer = null;
+            }
+        }
+
+        return answer;
+    }
+
+    private boolean showFile() {
+        try {
+            Uri fileUri = getDialogueUri();
+            String mime = "text/html";
+            Intent intent = new Intent();
+            intent.setAction(Intent.ACTION_VIEW);
+            intent.setDataAndType(fileUri, mime);
+            callingActivity.startActivity(intent);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+        return true;
+    }
+    @Override
+    protected Boolean doInBackground(DialogPusherParams... params) {
+        statusView = params[0].statusView;
+        peerId = params[0].peerId;
+        chosenName = params[0].chosenName;
+        callingActivity = params[0].callingActivity;
+        progressBar = params[0].progressBar;
+        publishProgress(0, 100);
+
+        userId = VKAccessToken.currentToken().userId;
+        if(userId == null) {
+            return false;
+        }
+        if(!writeHeader())
+            return false;
+
+        do {
+            String answer = getDialogues();
+            boolean ok = (answer != null && !answer.isEmpty());
+            if(!ok)
+                return false;
+            ok = pushData(answer);
+            if(!ok)
+                return false;
+            publishProgress((int)offset, (int)totalCount);
+        } while(offset < totalCount);
+        return writeTrail();
+    }
+
+    @Override
+    protected void onProgressUpdate(Integer... progress) {
+        progressBar.setMax(progress[1]);
+        progressBar.setProgress(progress[0]);
+    }
+
+    @Override
+    protected void onPostExecute(Boolean result) {
+        statusView.setText(R.string.status_text_opening);
+        if(showFile())
+            statusView.setText(R.string.status_text_ready);
+        else
+            statusView.setText(R.string.status_text_opening_error);
+    }
+
+    @Override
+    protected void onCancelled() {
+        // TODO
     }
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_pic">profile_pic</string>
+    <string name="username_placeholder">Имя (Обновление...)</string>
+    <string name="logout_button_caption">Выйти</string>
+    <string name="choose_dialogue_button_caption">Выбрать диалог</string>
+    <string name="chosen_dialogue_text">Выберите диалог</string>
+    <string name="chosen_dialogue_text_format">Выбран диалог: %s</string>
+    <string name="export_button_caption">Экспорт</string>
+    <string name="status_text_ready">Готово</string>
+    <string name="status_text_choose">Выберите диалог</string>
+    <string name="status_text_start">Запустите экспорт</string>
+    <string name="status_text_exporting">Экспортируется...</string>
+    <string name="status_text_opening">Открывается сохранённый файл...</string>
+    <string name="status_text_opening_error">Ошибка открытия сохранённого файла</string>
+</resources>
